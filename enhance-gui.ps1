@@ -300,13 +300,25 @@ function New-Brush([string]$hex) {
                  HorizontalAlignment="Left" Width="110" Margin="0,10,0,0"/>
       <TextBlock x:Name="tbRoot" Text="" Foreground="#5A5A62" FontSize="10.5" Margin="0,8,0,0"
                  TextTrimming="CharacterEllipsis"/>
+      <!-- search recordings by name -->
+      <Grid Margin="0,10,0,0">
+        <TextBox x:Name="txtSearch" Height="34" VerticalContentAlignment="Center" Padding="10,0,32,0"
+                 Background="#131316" BorderBrush="#222226" Foreground="#F2F2F5" CaretBrush="#BF5AF2"
+                 FontSize="12" BorderThickness="1" ToolTip="Search recordings by name"/>
+        <TextBlock x:Name="tbSearchHint" Text="Search..." Foreground="#6A6A72" FontSize="12"
+                   Margin="11,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
+        <Path Data="M10.5,3 A7.5,7.5 0 1 1 10.49,3 M15.8,15.8 L21,21"
+              Stroke="#6A6A72" StrokeThickness="1.6" Stretch="None"
+              HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0"/>
+      </Grid>
     </StackPanel>
 
     <!-- recording cards -->
-    <ListBox Grid.Row="2" x:Name="lvRecordings" Background="Transparent"
-             BorderThickness="0" ItemContainerStyle="{StaticResource RecItemStyle}"
-             ScrollViewer.HorizontalScrollBarVisibility="Disabled" Padding="0,0,12,0"
-             VirtualizingPanel.ScrollUnit="Pixel">
+    <Grid Grid.Row="2">
+      <ListBox x:Name="lvRecordings" Background="Transparent"
+               BorderThickness="0" ItemContainerStyle="{StaticResource RecItemStyle}"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled" Padding="0,0,12,0"
+               VirtualizingPanel.ScrollUnit="Pixel">
       <ListBox.ItemTemplate>
         <DataTemplate>
           <DockPanel LastChildFill="True">
@@ -347,6 +359,17 @@ function New-Brush([string]$hex) {
         </DataTemplate>
       </ListBox.ItemTemplate>
     </ListBox>
+      <!-- empty state -->
+      <StackPanel x:Name="emptyState" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center">
+        <Path Data="M10,4 L4,4 C2.9,4 2,4.9 2,6 L2,18 C2,19.1 2.9,20 4,20 L20,20 C21.1,20 22,19.1 22,18 L22,8 C22,6.9 21.1,6 20,6 L12,6 Z"
+              Stroke="#3A3A42" StrokeThickness="1.5" Stretch="Uniform" Width="46" Height="46" HorizontalAlignment="Center"/>
+        <TextBlock Text="No recordings found" Foreground="#8E8E93" FontSize="14" FontWeight="SemiBold"
+                   HorizontalAlignment="Center" Margin="0,12,0,0"/>
+        <TextBlock Text="Pick your recordings folder (folder icon above) or add a video file (document icon below)."
+                   Foreground="#5A5A62" FontSize="11.5" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+      </StackPanel>
+    </Grid>
+
 
     <!-- action bar: SVG icon buttons + status -->
     <Grid Grid.Row="3" Margin="2,12,2,0">
@@ -432,6 +455,9 @@ $tbRoot        = $window.FindName("tbRoot")
 $cbPreset      = $window.FindName("cbPreset")
 $tbStatus      = $window.FindName("tbStatus")
 $tbCount       = $window.FindName("tbCount")
+$txtSearch     = $window.FindName("txtSearch")
+$tbSearchHint  = $window.FindName("tbSearchHint")
+$emptyState    = $window.FindName("emptyState")
 
 $window.Add_MouseLeftButtonDown({ try { $window.DragMove() } catch {} })
 $btnClose.Add_Click({ $window.Close() })
@@ -542,9 +568,31 @@ function Refresh-List {
             if ($it.Path -eq $selPath) { $lv.SelectedItem = $it; break }
         }
     }
-    $tbCount.Text = "{0} recordings" -f $items.Count
-    if ($items.Count -eq 0) { $tbStatus.Text = "No recordings found in $root" }
+    Apply-Search
 }
+
+# Filter the visible recordings by the search box text; drives hint + empty state.
+function Apply-Search {
+    $items = @($lv.ItemsSource)
+    $query = ""
+    if ($txtSearch.Text) { $query = $txtSearch.Text.Trim() }
+    $view = [System.Windows.Data.CollectionViewSource]::GetDefaultView($lv.ItemsSource)
+    if ($view) {
+        if ($query) {
+            $view.Filter = [Predicate[object]] { param($item) $item.Name -match [regex]::Escape($query) }
+        } else {
+            $view.Filter = $null
+        }
+        $visible = @($view | ForEach-Object { $_ }).Count
+    } else {
+        $visible = $items.Count
+    }
+    $tbSearchHint.Visibility = if ($query) { $visOff } else { $visOn }
+    $emptyState.Visibility = if ($items.Count -eq 0) { $visOn } else { $visOff }
+    $tbCount.Text = if ($query -and $items.Count -gt 0 -and $visible -lt $items.Count) { "{0} of {1} recordings" -f $visible, $items.Count }
+                    else { "{0} recordings" -f $items.Count }
+}
+$txtSearch.Add_TextChanged({ Apply-Search })
 
 function Set-Buttons([bool]$enabled) {
     $btnEnhance.IsEnabled = $enabled
