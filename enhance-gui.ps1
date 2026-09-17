@@ -360,10 +360,30 @@ function New-Brush([string]$hex) {
           <ComboBoxItem Content="Natural"/>
           <ComboBoxItem Content="Classic"/>
         </ComboBox>
-        <Button x:Name="btnEnhance" Style="{StaticResource IconBtnPrimary}" ToolTip="Enhance selected recording"
-                Margin="0,0,8,0">
-          <Path Data="M7,1.5 L8.7,5.3 L12.5,7 L8.7,8.7 L7,12.5 L5.3,8.7 L1.5,7 L5.3,5.3 Z M16.5,11.5 L17.7,14.3 L20.5,15.5 L17.7,16.7 L16.5,19.5 L15.3,16.7 L12.5,15.5 L15.3,14.3 Z M18.5,3 L19.2,4.8 L21,5.5 L19.2,6.2 L18.5,8 L17.8,6.2 L16,5.5 L17.8,4.8 Z"
-                Fill="#0A0A0B" Stretch="Uniform" Width="20" Height="20"/>
+        <Button x:Name="btnEnhance" Height="40" Padding="18,0" Margin="0,0,10,0" Cursor="Hand"
+                ToolTip="Enhance selected recording">
+          <Button.Template>
+            <ControlTemplate TargetType="Button">
+              <Border x:Name="Bd" Background="{StaticResource Accent}" CornerRadius="20"
+                      Padding="{TemplateBinding Padding}">
+                <StackPanel Orientation="Horizontal">
+                  <Path Data="M7,1.5 L8.7,5.3 L12.5,7 L8.7,8.7 L7,12.5 L5.3,8.7 L1.5,7 L5.3,5.3 Z M16.5,11.5 L17.7,14.3 L20.5,15.5 L17.7,16.7 L16.5,19.5 L15.3,16.7 L12.5,15.5 L15.3,14.3 Z M18.5,3 L19.2,4.8 L21,5.5 L19.2,6.2 L18.5,8 L17.8,6.2 L16,5.5 L17.8,4.8 Z"
+                        Fill="#FFFFFF" Stretch="Uniform" Width="14" Height="14"
+                        VerticalAlignment="Center"/>
+                  <TextBlock Text="Enhance" Foreground="#FFFFFF" FontWeight="Bold" FontSize="13"
+                             VerticalAlignment="Center" Margin="8,0,0,0"/>
+                </StackPanel>
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter TargetName="Bd" Property="Opacity" Value="0.87"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                  <Setter TargetName="Bd" Property="Opacity" Value="0.35"/>
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Button.Template>
         </Button>
         <Button x:Name="btnPlay" Style="{StaticResource IconBtn}" ToolTip="Play result (falls back to original)"
                 Margin="0,0,8,0">
