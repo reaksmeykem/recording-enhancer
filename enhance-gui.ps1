@@ -500,7 +500,32 @@ $enhBg      = New-Brush "#1B2E22"
 $visOn      = [System.Windows.Visibility]::Visible
 $visOff     = [System.Windows.Visibility]::Collapsed
 
+# Keeps the window painting during synchronous scans (forces pending render to flush).
+function Pump-UI {
+    $window.Dispatcher.Invoke([action]{}, [System.Windows.Threading.DispatcherPriority]::Background)
+}
+
+# Visible loading state while the folder is scanned / files are probed.
+function Set-Loading([bool]$on) {
+    if ($on) {
+        $btnEnhance.IsEnabled = $false; $btnRefresh.IsEnabled = $false
+        $btnBrowse.IsEnabled = $false; $btnPlay.IsEnabled = $false
+        $btnChangeFolder.IsEnabled = $false
+        $tbStatus.Text = "Loading recordings..."; $tbStatus.Foreground = New-Brush "#8E8E93"
+        $pb.IsIndeterminate = $true; $pb.Visibility = $visOn
+        Pump-UI
+    } else {
+        $pb.IsIndeterminate = $false; $pb.Visibility = $visOff
+        Set-Buttons $true; $btnChangeFolder.IsEnabled = $true
+        # keep completion messages (e.g. "Done:") but clear the loading text
+        if ($tbStatus.Text -like "Loading recordings...*") {
+            Set-Status "Select a recording, then enhance." "#8E8E93"
+        }
+    }
+}
+
 function Refresh-List {
+    Set-Loading $true
     # remember which recording was selected so a refresh doesn't wipe it
     $selPath = $null
     if ($lv.SelectedItem) { $selPath = $lv.SelectedItem.Path }
@@ -533,6 +558,8 @@ function Refresh-List {
                     MicTip      = if ($hasMic) { "Microphone track found" } else { "No microphone track (video's own audio will be enhanced)" }
                     EnhancedVis = if ($enh) { $visOn } else { $visOff }
                 })
+                Set-Status "Loading recordings... $($items.Count) found" "#8E8E93"
+                Pump-UI
             }
         }
     # 2) loose video files directly in the chosen folder (e.g. motionik-video-*.mp4 exports)
@@ -563,6 +590,8 @@ function Refresh-List {
                 MicTip      = if ($isAudio) { "Audio file - voice will be enhanced" } else { if ($hasMic) { "Microphone track found" } else { "No microphone track (video's own audio will be enhanced)" } }
                 EnhancedVis = if ($enh) { $visOn } else { $visOff }
             })
+            Set-Status "Loading recordings... $($items.Count) found" "#8E8E93"
+            Pump-UI
         }
     $lv.ItemsSource = $items
     # restore the selection (by path) after the refresh
@@ -571,6 +600,7 @@ function Refresh-List {
             if ($it.Path -eq $selPath) { $lv.SelectedItem = $it; break }
         }
     }
+    Set-Loading $false
     Apply-Search
 }
 
