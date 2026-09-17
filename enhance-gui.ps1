@@ -365,7 +365,7 @@ function New-Brush([string]$hex) {
               Stroke="#3A3A42" StrokeThickness="1.5" Stretch="Uniform" Width="46" Height="46" HorizontalAlignment="Center"/>
         <TextBlock Text="No recordings found" Foreground="#8E8E93" FontSize="14" FontWeight="SemiBold"
                    HorizontalAlignment="Center" Margin="0,12,0,0"/>
-        <TextBlock Text="Pick your recordings folder (folder icon above) or add a video file (document icon below)."
+        <TextBlock Text="Pick your recordings folder (folder icon above) or add a video/audio file (document icon below)."
                    Foreground="#5A5A62" FontSize="11.5" HorizontalAlignment="Center" Margin="0,5,0,0"/>
       </StackPanel>
     </Grid>
@@ -536,9 +536,10 @@ function Refresh-List {
             }
         }
     # 2) loose video files directly in the chosen folder (e.g. motionik-video-*.mp4 exports)
+    #    plus audio-only files (mp3/wav/m4a/...) — the app enhances their voice too.
     Get-ChildItem $root -File -ErrorAction SilentlyContinue |
         Where-Object {
-            $_.Extension -match '^\.(mp4|webm|mkv|mov)$' -and $_.Name -notmatch "ENHANCED"
+            $_.Extension -match '^\.(mp4|webm|mkv|mov|mp3|wav|m4a|aac|flac|ogg)$' -and $_.Name -notmatch "ENHANCED"
         } |
         Sort-Object LastWriteTime -Descending | ForEach-Object {
             $dur = ""
@@ -547,7 +548,9 @@ function Refresh-List {
                 $dur = "{0:mm\:ss}" -f [TimeSpan]::FromSeconds($d)
             } catch { $dur = "--:--" }
             $hasMic = Test-Path (Join-Path $_.DirectoryName "microphone.webm")
-            $enh = Test-Path (Join-Path $_.DirectoryName ($_.BaseName + "-ENHANCED.mp4"))
+            $enh = (Test-Path (Join-Path $_.DirectoryName ($_.BaseName + "-ENHANCED.mp4"))) -or
+                   (Test-Path (Join-Path $_.DirectoryName ($_.BaseName + "-ENHANCED.m4a")))
+            $isAudio = $_.Extension -match '^\.(mp3|wav|m4a|aac|flac|ogg)$'
             $items.Add([PSCustomObject]@{
                 Date        = $_.LastWriteTime.ToString("MMM d  HH:mm")
                 Duration    = $dur
@@ -557,7 +560,7 @@ function Refresh-List {
                 TileBg      = if ($enh) { $tileBgOn } else { $tileBgOff }
                 GlyphBrush  = if ($enh) { $glyphOn } else { $glyphOff }
                 MicBrush    = if ($hasMic) { $micOn } else { $micOff }
-                MicTip      = if ($hasMic) { "Microphone track found" } else { "No microphone track (video's own audio will be enhanced)" }
+                MicTip      = if ($isAudio) { "Audio file - voice will be enhanced" } else { if ($hasMic) { "Microphone track found" } else { "No microphone track (video's own audio will be enhanced)" } }
                 EnhancedVis = if ($enh) { $visOn } else { $visOff }
             })
         }
@@ -642,7 +645,10 @@ function Get-LoudGain([string]$audioFile, [string]$preFilter) {
 
 function Start-Enhance($videoPath, $micPath) {
     $dir = Split-Path $videoPath -Parent
-    $script:outPath = Join-Path $dir ([IO.Path]::GetFileNameWithoutExtension($videoPath) + "-ENHANCED.mp4")
+    # audio-only input -> audio-only output (.m4a); video input -> .mp4 (video stream-copied)
+    $isAudioOnly = $videoPath -match '\.(mp3|wav|m4a|aac|flac|ogg)$'
+    $ext = if ($isAudioOnly) { ".m4a" } else { ".mp4" }
+    $script:outPath = Join-Path $dir ([IO.Path]::GetFileNameWithoutExtension($videoPath) + "-ENHANCED$ext")
     try { $script:totalDur = [double](& $ffprobe -v error -show_entries format=duration -of csv=p=0 $videoPath 2>$null) } catch { $script:totalDur = 0 }
     Remove-Item $script:progFile -ErrorAction SilentlyContinue
 
@@ -682,7 +688,12 @@ function Start-Enhance($videoPath, $micPath) {
     if ($null -eq $gain) { $gain = 0 }
     $filter = "$pre,volume=${gain}dB,alimiter=limit=0.891:level=false"
 
-    if ($useMic) {
+    if ($isAudioOnly) {
+        # audio-only input: no video stream to map
+        $argStr = "-y -v error -i `"$videoPath`" " +
+                  "-filter_complex `"[0:a]$filter[a]`" -map `"[a]`" " +
+                  "-c:a aac -b:a 160k "
+    } elseif ($useMic) {
         # separate mic track (Motionik style): enhance the mic audio, keep video as-is
         $argStr = "-y -v error -i `"$videoPath`" -i `"$micPath`" " +
                   "-filter_complex `"[1:a]$filter[a]`" -map 0:v -map `"[a]`" "
@@ -691,8 +702,12 @@ function Start-Enhance($videoPath, $micPath) {
         $argStr = "-y -v error -i `"$videoPath`" " +
                   "-filter_complex `"[0:a]$filter[a]`" -map 0:v -map `"[a]`" "
     }
-    $argStr += "-c:v copy -c:a aac -b:a 160k -shortest " +
-               "-progress `"$script:progFile`" `"$script:outPath`""
+    if ($isAudioOnly) {
+        $argStr += "-progress `"$script:progFile`" `"$script:outPath`""
+    } else {
+        $argStr += "-c:v copy -c:a aac -b:a 160k -shortest " +
+                   "-progress `"$script:progFile`" `"$script:outPath`""
+    }
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $ffmpeg
     $psi.Arguments = $argStr
@@ -747,8 +762,8 @@ $btnEnhance.Add_Click({
 $btnRefresh.Add_Click({ Refresh-List })
 $btnBrowse.Add_Click({
     $dlg = New-Object Microsoft.Win32.OpenFileDialog
-    $dlg.Title = "Choose a video to enhance"
-    $dlg.Filter = "Video files (*.mp4;*.webm;*.mkv;*.mov)|*.mp4;*.webm;*.mkv;*.mov|All files (*.*)|*.*"
+    $dlg.Title = "Choose a video or audio file to enhance"
+    $dlg.Filter = "Media files (*.mp4;*.webm;*.mkv;*.mov;*.mp3;*.wav;*.m4a;*.aac;*.flac;*.ogg)|*.mp4;*.webm;*.mkv;*.mov;*.mp3;*.wav;*.m4a;*.aac;*.flac;*.ogg|All files (*.*)|*.*"
     $dlg.InitialDirectory = $root
     if ($dlg.ShowDialog() -eq $true) {
         $script:lastPath = $dlg.FileName

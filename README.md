@@ -9,7 +9,8 @@ RNNoise AI denoiser — locally, nothing is uploaded.
 
 - Lists recordings from a folder you choose (defaults to `Motionik-Recordings`),
   merges a nearby `microphone.webm` track if one exists, otherwise enhances the
-  video's own audio.
+  video's own audio. **Audio-only files (mp3, wav, m4a, aac, flac, ogg) work too**
+  and export as `*-ENHANCED.m4a`.
 - Two voice treatments:
   - **Natural** — gentle rumble filter + AI denoise only. Keeps the voice's own
     tone; leaves a little room sound on purpose.
